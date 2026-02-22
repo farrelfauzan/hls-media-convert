@@ -1,0 +1,28 @@
+# FastAPI
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Celery
+celery[redis]==5.3.6
+redis==5.0.1
+
+# AWS
+boto3==1.34.25
+botocore==1.34.25
+
+# Database
+sqlalchemy==2.0.25
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Utilities
+python-dotenv==1.0.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+httpx==0.26.0
+aiofiles==23.2.1
+
+# Video processing (FFmpeg wrapper)
+ffmpeg-python==0.2.0
