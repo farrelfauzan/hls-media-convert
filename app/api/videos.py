@@ -347,3 +347,63 @@ async def get_stream_url(
         "stream_url": job.master_playlist_url,
         "status": job.status.value,
     }
+
+
+@router.get(
+    "/playlists",
+    summary="List HLS playlists",
+    description="Retrieve all M3U8 playlists or search by filename",
+)
+async def list_playlists(
+    search: Optional[str] = Query(None, description="Search by original filename"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return all completed jobs that have an M3U8 master playlist URL.
+    Optionally filter by original filename using the `search` query param.
+    """
+    query = (
+        select(ConversionJob)
+        .where(
+            ConversionJob.status == JobStatus.COMPLETED,
+            ConversionJob.master_playlist_url.isnot(None),
+        )
+        .order_by(ConversionJob.created_at.desc())
+    )
+    count_query = (
+        select(func.count(ConversionJob.id))
+        .where(
+            ConversionJob.status == JobStatus.COMPLETED,
+            ConversionJob.master_playlist_url.isnot(None),
+        )
+    )
+
+    if search:
+        like_expr = f"%{search}%"
+        query = query.where(ConversionJob.original_filename.ilike(like_expr))
+        count_query = count_query.where(ConversionJob.original_filename.ilike(like_expr))
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    jobs = result.scalars().all()
+
+    return {
+        "playlists": [
+            {
+                "job_id": job.id,
+                "original_filename": job.original_filename,
+                "master_playlist_url": job.master_playlist_url,
+                "created_at": job.created_at,
+                "completed_at": job.completed_at,
+            }
+            for job in jobs
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }

@@ -35,7 +35,7 @@ class PresignedUploadResponse(BaseModel):
 
 class JobResponse(BaseModel):
     """Response schema for job information"""
-    job_id: str = Field(..., description="Unique job identifier")
+    job_id: str = Field(..., validation_alias="id", description="Unique job identifier")
     status: JobStatus = Field(..., description="Current job status")
     original_filename: str = Field(..., description="Original filename")
     source_s3_key: str = Field(..., description="Source video S3 key")
@@ -47,6 +47,7 @@ class JobResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class JobListResponse(BaseModel):
