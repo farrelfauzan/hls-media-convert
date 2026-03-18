@@ -16,6 +16,8 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
     depends_on:
       - db
       - redis
@@ -39,6 +41,8 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
     depends_on:
       - db
       - redis

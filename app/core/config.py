@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # Temp directory for processing
     TEMP_DIR: str = "/tmp/hls_converter"
     
+    # Webhook
+    WEBHOOK_URL: str = ""  # Default webhook URL for conversion notifications
+    WEBHOOK_SECRET: str = ""  # HMAC secret for webhook signature verification
+    
     # Allowed video extensions
     ALLOWED_EXTENSIONS: List[str] = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv"]
     
