@@ -19,6 +19,12 @@ from app.schemas.job import (
     JobListResponse,
     TaskStatusResponse,
     ErrorResponse,
+    BulkUploadRequestSchema,
+    BulkUploadResponse,
+    BulkUploadResponseItem,
+    BulkConversionRequestSchema,
+    BulkConversionResponse,
+    BulkConversionResponseItem,
 )
 from app.services.s3_service import s3_service
 from app.tasks.conversion_tasks import convert_video_to_hls
@@ -80,10 +86,198 @@ async def get_upload_url(request: UploadRequestSchema):
 
 
 @router.post(
+    "/bulk-upload-urls",
+    response_model=BulkUploadResponse,
+    summary="Get presigned URLs for bulk video upload",
+    description=(
+        "Generate presigned S3 upload URLs for multiple video files in a single request. "
+        "Accepts up to **50** files. Each item in `results` independently reports success or failure, "
+        "so a partial success is possible."
+    ),
+    responses={
+        200: {"description": "Presigned URLs generated (check per-item `error` field for partial failures)"},
+        422: {"description": "Validation error"},
+    },
+)
+async def bulk_get_upload_urls(request: BulkUploadRequestSchema):
+    """
+    Generate presigned S3 upload URLs for multiple files at once.
+
+    Each file is processed independently — if one fails (e.g. unsupported extension)
+    only that item will contain an `error`; the others will succeed.
+
+    After uploading all files, use `/videos/bulk-convert` to start conversions.
+    """
+    results: list[BulkUploadResponseItem] = []
+    succeeded = 0
+    failed = 0
+
+    for item in request.files:
+        if not validate_file_extension(item.filename):
+            results.append(
+                BulkUploadResponseItem(
+                    filename=item.filename,
+                    upload_url="",
+                    fields={},
+                    s3_key="",
+                    expires_in=0,
+                    error=f"Invalid file type. Allowed types: {settings.ALLOWED_EXTENSIONS}",
+                )
+            )
+            failed += 1
+            continue
+
+        file_id = str(uuid.uuid4())
+        ext = os.path.splitext(item.filename)[1]
+        s3_key = f"uploads/{file_id}{ext}"
+
+        try:
+            presigned_data = s3_service.generate_presigned_upload_url(
+                s3_key=s3_key,
+                content_type=item.content_type,
+                expiration=3600,
+            )
+            results.append(
+                BulkUploadResponseItem(
+                    filename=item.filename,
+                    upload_url=presigned_data["url"],
+                    fields=presigned_data["fields"],
+                    s3_key=s3_key,
+                    expires_in=3600,
+                )
+            )
+            succeeded += 1
+        except Exception as e:
+            results.append(
+                BulkUploadResponseItem(
+                    filename=item.filename,
+                    upload_url="",
+                    fields={},
+                    s3_key="",
+                    expires_in=0,
+                    error=f"Failed to generate upload URL: {str(e)}",
+                )
+            )
+            failed += 1
+
+    return BulkUploadResponse(
+        results=results,
+        total=len(request.files),
+        succeeded=succeeded,
+        failed=failed,
+    )
+
+
+@router.post(
+    "/bulk-convert",
+    response_model=BulkConversionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Start bulk video conversion",
+    description=(
+        "Queue HLS conversion jobs for multiple already-uploaded videos in a single request. "
+        "Accepts up to **50** items. Each item is processed independently."
+    ),
+    responses={
+        202: {"description": "Jobs accepted (check per-item `status` for partial failures)"},
+        422: {"description": "Validation error"},
+    },
+)
+async def bulk_start_conversion(
+    request: BulkConversionRequestSchema,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start HLS conversion jobs for multiple videos.
+
+    Each video must already exist in S3. Jobs that pass S3 existence checks are
+    immediately queued; items that fail (missing file, DB error, etc.) report
+    `status: "failed"` in the response while the others proceed normally.
+
+    ## Webhook
+    Per-item `callback_url` behaves identically to the single `/convert` endpoint.
+    """
+    results: list[BulkConversionResponseItem] = []
+    succeeded = 0
+    failed = 0
+
+    for item in request.conversions:
+        # Verify source file exists in S3
+        if not s3_service.file_exists(item.s3_key):
+            results.append(
+                BulkConversionResponseItem(
+                    s3_key=item.s3_key,
+                    original_filename=item.original_filename,
+                    status="failed",
+                    message="Source video not found in S3",
+                )
+            )
+            failed += 1
+            continue
+
+        try:
+            job_id = str(uuid.uuid4())
+            output_s3_prefix = f"hls/{job_id}"
+
+            job = ConversionJob(
+                id=job_id,
+                original_filename=item.original_filename,
+                source_s3_key=item.s3_key,
+                output_s3_prefix=output_s3_prefix,
+                callback_url=item.callback_url,
+                status=JobStatus.PENDING,
+            )
+            db.add(job)
+            await db.flush()  # get DB row before committing batch
+
+            task = convert_video_to_hls.delay(
+                job_id=job_id,
+                source_s3_key=item.s3_key,
+                output_s3_prefix=output_s3_prefix,
+                original_filename=item.original_filename,
+                callback_url=item.callback_url,
+            )
+
+            job.celery_task_id = task.id
+            job.status = JobStatus.PROCESSING
+
+            results.append(
+                BulkConversionResponseItem(
+                    s3_key=item.s3_key,
+                    original_filename=item.original_filename,
+                    job_id=job_id,
+                    task_id=task.id,
+                    status="processing",
+                    message="Conversion job has been queued",
+                )
+            )
+            succeeded += 1
+        except Exception as e:
+            results.append(
+                BulkConversionResponseItem(
+                    s3_key=item.s3_key,
+                    original_filename=item.original_filename,
+                    status="failed",
+                    message=f"Failed to queue conversion: {str(e)}",
+                )
+            )
+            failed += 1
+
+    await db.commit()
+
+    return BulkConversionResponse(
+        results=results,
+        total=len(request.conversions),
+        succeeded=succeeded,
+        failed=failed,
+    )
+
+
+@router.post(
     "/convert",
     response_model=ConversionStartResponse,
     summary="Start video conversion",
-    description="Start converting an uploaded video to HLS format",
+    description="Start converting an uploaded video to HLS format. "
+    "Optionally provide a `callback_url` to receive a webhook POST when the job finishes.",
 )
 async def start_conversion(
     request: ConversionRequestSchema,
@@ -91,9 +285,29 @@ async def start_conversion(
 ):
     """
     Start a video conversion job.
-    
+
     The video must already be uploaded to S3. This endpoint creates
     a conversion job and queues it for background processing.
+
+    ## Webhook (callback_url)
+
+    If `callback_url` is provided, the service will send a **POST** request
+    to that URL when the conversion **completes** or **fails**.
+
+    **Payload:**
+    ```json
+    {
+      "job_id": "<uuid>",
+      "status": "completed" | "failed",
+      "master_playlist_url": "https://..." | null,
+      "error_message": "..." | null
+    }
+    ```
+
+    **Signature verification (optional):**
+    If `WEBHOOK_SECRET` is configured, the request includes an
+    `X-Webhook-Signature` header with an HMAC-SHA256 hex digest
+    of the JSON body (keys sorted).
     """
     # Verify the source file exists
     if not s3_service.file_exists(request.s3_key):
@@ -111,6 +325,7 @@ async def start_conversion(
         original_filename=request.original_filename,
         source_s3_key=request.s3_key,
         output_s3_prefix=output_s3_prefix,
+        callback_url=request.callback_url,
         status=JobStatus.PENDING,
     )
     
@@ -124,6 +339,7 @@ async def start_conversion(
         source_s3_key=request.s3_key,
         output_s3_prefix=output_s3_prefix,
         original_filename=request.original_filename,
+        callback_url=request.callback_url,
     )
     
     # Update job with task ID
