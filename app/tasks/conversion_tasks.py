@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.tasks.celery_app import celery_app
 from app.services.s3_service import s3_service
 from app.services.hls_service import hls_converter
+from app.services.webhook_service import send_webhook_sync
 from app.core.config import settings
 from app.models.job import ConversionJob, JobStatus
 
@@ -54,6 +55,7 @@ def convert_video_to_hls(
     source_s3_key: str,
     output_s3_prefix: str,
     original_filename: str,
+    callback_url: Optional[str] = None,
 ) -> dict:
     """
     Celery task to convert a video from S3 to HLS format and upload back to S3
@@ -140,6 +142,14 @@ def convert_video_to_hls(
             master_playlist_url=master_playlist_url,
         )
         
+        # Send webhook notification
+        send_webhook_sync(
+            callback_url=callback_url,
+            job_id=job_id,
+            status="completed",
+            master_playlist_url=master_playlist_url,
+        )
+        
         logger.info(f"Conversion complete. Master playlist: {master_playlist_url}")
         
         return {
@@ -157,6 +167,14 @@ def convert_video_to_hls(
         update_job_status(
             job_id=job_id,
             status=JobStatus.FAILED,
+            error_message=str(e),
+        )
+        
+        # Send webhook notification
+        send_webhook_sync(
+            callback_url=callback_url,
+            job_id=job_id,
+            status="failed",
             error_message=str(e),
         )
         
