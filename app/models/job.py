@@ -29,6 +29,9 @@ class ConversionJob(Base):
     output_s3_prefix = Column(String(512), nullable=True)
     master_playlist_url = Column(Text, nullable=True)
     
+    # Webhook
+    callback_url = Column(String(1024), nullable=True)
+    
     # Status tracking
     status = Column(
         SQLEnum(JobStatus),
