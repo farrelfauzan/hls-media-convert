@@ -7,7 +7,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/hls_converter
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@host.docker.internal:5432/hls_converter
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -18,8 +18,8 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      - API_KEY=${API_KEY:-}
     depends_on:
-      - db
       - redis
     volumes:
       - ./app:/app/app
@@ -32,7 +32,7 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/hls_converter
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@host.docker.internal:5432/hls_converter
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -43,25 +43,12 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      - API_KEY=${API_KEY:-}
     depends_on:
-      - db
       - redis
     volumes:
       - ./app:/app/app
       - temp_data:/tmp/hls_converter
-    restart: unless-stopped
-
-  # PostgreSQL Database
-  db:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=hls_converter
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     restart: unless-stopped
 
   # Redis
@@ -106,7 +93,6 @@ services:
       - local
 
 volumes:
-  postgres_data:
   redis_data:
   minio_data:
   temp_data:

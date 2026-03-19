@@ -29,8 +29,9 @@ from app.schemas.job import (
 from app.services.s3_service import s3_service
 from app.tasks.conversion_tasks import convert_video_to_hls
 from app.tasks.celery_app import celery_app
+from app.core.auth import require_api_key
 
-router = APIRouter(prefix="/videos", tags=["videos"])
+router = APIRouter(prefix="/videos", tags=["videos"], dependencies=[Depends(require_api_key)])
 
 
 def validate_file_extension(filename: str) -> bool:

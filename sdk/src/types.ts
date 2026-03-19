@@ -114,6 +114,8 @@ export interface HlsConverterConfig {
   timeout?: number;
   /** Custom headers to include in every request */
   headers?: Record<string, string>;
+  /** API key sent via X-API-Key header */
+  apiKey?: string;
 }
 
 export interface HlsApiError {

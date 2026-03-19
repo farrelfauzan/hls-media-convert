@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
     
+    # API Key for authentication
+    API_KEY: str = ""
+    
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/hls_converter"
     
