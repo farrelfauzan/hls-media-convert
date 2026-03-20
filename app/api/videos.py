@@ -63,7 +63,7 @@ async def get_upload_url(request: UploadRequestSchema):
     # Generate unique S3 key
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(request.filename)[1]
-    s3_key = f"uploads/{file_id}{ext}"
+    s3_key = f"videos/{file_id}{ext}"
     
     # Generate presigned URL
     try:
@@ -130,7 +130,7 @@ async def bulk_get_upload_urls(request: BulkUploadRequestSchema):
 
         file_id = str(uuid.uuid4())
         ext = os.path.splitext(item.filename)[1]
-        s3_key = f"uploads/{file_id}{ext}"
+        s3_key = f"videos/{file_id}{ext}"
 
         try:
             presigned_data = s3_service.generate_presigned_upload_url(
