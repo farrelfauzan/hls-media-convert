@@ -73,6 +73,8 @@ def convert_video_to_hls(
     local_output_dir = None
     
     try:
+        logger.info(f"[JOB {job_id}] Task started. source={source_s3_key}, callback_url={callback_url}")
+        
         # Update task state
         self.update_state(
             state="PROCESSING",
@@ -89,8 +91,9 @@ def convert_video_to_hls(
         os.makedirs(os.path.dirname(local_video_path), exist_ok=True)
         
         # Download video from S3
-        logger.info(f"Downloading video from S3: {source_s3_key}")
+        logger.info(f"[JOB {job_id}] Downloading video from S3: {source_s3_key}")
         s3_service.download_file(source_s3_key, local_video_path)
+        logger.info(f"[JOB {job_id}] Download complete. File size: {os.path.getsize(local_video_path)} bytes")
         
         # Update task state
         self.update_state(
@@ -103,12 +106,13 @@ def convert_video_to_hls(
         )
         
         # Convert to HLS
-        logger.info(f"Converting video to HLS: {local_video_path}")
+        logger.info(f"[JOB {job_id}] Starting HLS conversion: {local_video_path}")
         hls_result = hls_converter.convert_to_hls(
             video_path=local_video_path,
             output_dir=local_output_dir,
             job_id=job_id,
         )
+        logger.info(f"[JOB {job_id}] HLS conversion complete. Output dir: {hls_result.output_dir}")
         
         # Update task state
         self.update_state(
@@ -121,11 +125,12 @@ def convert_video_to_hls(
         )
         
         # Upload HLS files to S3
-        logger.info(f"Uploading HLS files to S3: {output_s3_prefix}")
+        logger.info(f"[JOB {job_id}] Uploading HLS files to S3: {output_s3_prefix}")
         uploaded_files = upload_hls_to_s3(
             hls_result.output_dir,
             output_s3_prefix,
         )
+        logger.info(f"[JOB {job_id}] Upload complete. {len(uploaded_files)} files uploaded")
         
         # Generate master playlist URL
         master_playlist_url = s3_service.get_public_url(
@@ -136,21 +141,24 @@ def convert_video_to_hls(
         cleanup_local_files(job_id)
         
         # Update job status in database
+        logger.info(f"[JOB {job_id}] Updating DB status to COMPLETED. playlist_url={master_playlist_url}")
         update_job_status(
             job_id=job_id,
             status=JobStatus.COMPLETED,
             master_playlist_url=master_playlist_url,
         )
+        logger.info(f"[JOB {job_id}] DB updated successfully")
         
         # Send webhook notification
+        webhook_url = callback_url or settings.WEBHOOK_URL
+        logger.info(f"[JOB {job_id}] Sending webhook to: {webhook_url}")
         send_webhook_sync(
             callback_url=callback_url,
             job_id=job_id,
             status="completed",
             master_playlist_url=master_playlist_url,
         )
-        
-        logger.info(f"Conversion complete. Master playlist: {master_playlist_url}")
+        logger.info(f"[JOB {job_id}] Conversion fully complete. Master playlist: {master_playlist_url}")
         
         return {
             "job_id": job_id,
@@ -161,7 +169,7 @@ def convert_video_to_hls(
         }
         
     except Exception as e:
-        logger.error(f"Conversion failed for job {job_id}: {str(e)}")
+        logger.error(f"[JOB {job_id}] Conversion FAILED: {str(e)}", exc_info=True)
         
         # Update job status in database
         update_job_status(

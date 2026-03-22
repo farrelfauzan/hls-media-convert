@@ -218,3 +218,29 @@ class ErrorResponse(BaseModel):
     """Response schema for errors"""
     error: str
     detail: Optional[str] = None
+
+
+class WebhookLogResponse(BaseModel):
+    """Response schema for a webhook log entry"""
+    id: str = Field(..., description="Log entry ID")
+    job_id: str = Field(..., description="Associated job ID")
+    url: str = Field(..., description="Webhook URL")
+    method: str = Field(..., description="HTTP method")
+    request_headers: Optional[str] = Field(None, description="Request headers (JSON)")
+    request_body: Optional[str] = Field(None, description="Request body (JSON)")
+    response_status_code: Optional[int] = Field(None, description="HTTP response status code")
+    response_body: Optional[str] = Field(None, description="Response body")
+    status: str = Field(..., description="Delivery outcome: success, failed, or no_url")
+    error_message: Optional[str] = Field(None, description="Error details if delivery failed")
+    created_at: Optional[datetime] = Field(None, description="When the webhook was attempted")
+
+    class Config:
+        from_attributes = True
+
+
+class WebhookLogListResponse(BaseModel):
+    """Response schema for paginated webhook logs"""
+    logs: List[WebhookLogResponse]
+    total: int
+    page: int
+    page_size: int

@@ -23,6 +23,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Initialize database tables"""
     from app.models.job import Base
-    
+    import app.models.webhook_log  # noqa: F401 — register WebhookLog with Base
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

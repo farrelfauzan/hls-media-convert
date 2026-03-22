@@ -10,6 +10,7 @@ from celery.result import AsyncResult
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.job import ConversionJob, JobStatus
+from app.models.webhook_log import WebhookLog
 from app.schemas.job import (
     UploadRequestSchema,
     PresignedUploadResponse,
@@ -25,6 +26,8 @@ from app.schemas.job import (
     BulkConversionRequestSchema,
     BulkConversionResponse,
     BulkConversionResponseItem,
+    WebhookLogResponse,
+    WebhookLogListResponse,
 )
 from app.services.s3_service import s3_service
 from app.tasks.conversion_tasks import convert_video_to_hls
@@ -624,3 +627,89 @@ async def list_playlists(
         "page": page,
         "page_size": page_size,
     }
+
+
+# ── Webhook Logs (debug) ────────────────────────────────────────────
+
+
+@router.get(
+    "/webhook-logs",
+    response_model=WebhookLogListResponse,
+    summary="List webhook logs",
+    description="Get a paginated list of all webhook delivery attempts for debugging",
+)
+async def list_webhook_logs(
+    job_id: Optional[str] = Query(None, description="Filter by job ID"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by outcome: success, failed, no_url"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=200, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return webhook delivery logs with optional filters.
+    Useful for debugging why a callback was not received.
+    """
+    query = select(WebhookLog).order_by(WebhookLog.created_at.desc())
+    count_query = select(func.count(WebhookLog.id))
+
+    if job_id:
+        query = query.where(WebhookLog.job_id == job_id)
+        count_query = count_query.where(WebhookLog.job_id == job_id)
+
+    if status_filter:
+        query = query.where(WebhookLog.status == status_filter)
+        count_query = count_query.where(WebhookLog.status == status_filter)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    logs = result.scalars().all()
+
+    return WebhookLogListResponse(
+        logs=[WebhookLogResponse.model_validate(log) for log in logs],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get(
+    "/jobs/{job_id}/webhook-logs",
+    response_model=WebhookLogListResponse,
+    summary="Get webhook logs for a job",
+    description="Get all webhook delivery attempts for a specific job",
+)
+async def get_job_webhook_logs(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return all webhook delivery logs for a specific job.
+    Shows request/response details for each attempt.
+    """
+    # Verify job exists
+    job_result = await db.execute(
+        select(ConversionJob).where(ConversionJob.id == job_id)
+    )
+    if not job_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+
+    query = (
+        select(WebhookLog)
+        .where(WebhookLog.job_id == job_id)
+        .order_by(WebhookLog.created_at.desc())
+    )
+    result = await db.execute(query)
+    logs = result.scalars().all()
+
+    return WebhookLogListResponse(
+        logs=[WebhookLogResponse.model_validate(log) for log in logs],
+        total=len(logs),
+        page=1,
+        page_size=len(logs),
+    )

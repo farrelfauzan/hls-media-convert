@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     environment:
@@ -31,6 +33,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379/0

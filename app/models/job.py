@@ -34,7 +34,7 @@ class ConversionJob(Base):
     
     # Status tracking
     status = Column(
-        SQLEnum(JobStatus),
+        SQLEnum(JobStatus, values_callable=lambda e: [x.value for x in e]),
         default=JobStatus.PENDING,
         nullable=False,
         index=True,
