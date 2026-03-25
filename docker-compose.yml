@@ -10,9 +10,9 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_URL=redis://performa-edu-redis:6379/0
+      - CELERY_BROKER_URL=redis://performa-edu-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://performa-edu-redis:6379/0
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
@@ -21,12 +21,12 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
       - API_KEY=${API_KEY:-}
-    depends_on:
-      - redis
     volumes:
       - ./app:/app/app
       - temp_data:/tmp/hls_converter
     restart: unless-stopped
+    networks:
+      - performa-network
 
   # Celery Worker
   worker:
@@ -37,9 +37,9 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_URL=redis://performa-edu-redis:6379/0
+      - CELERY_BROKER_URL=redis://performa-edu-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://performa-edu-redis:6379/0
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
@@ -48,22 +48,16 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
       - API_KEY=${API_KEY:-}
-    depends_on:
-      - redis
     volumes:
       - ./app:/app/app
       - temp_data:/tmp/hls_converter
     restart: unless-stopped
+    networks:
+      - performa-network
 
-  # Redis
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
+networks:
+  performa-network:
+    external: true
 
 volumes:
-  redis_data:
   temp_data:

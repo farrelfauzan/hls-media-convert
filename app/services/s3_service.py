@@ -174,7 +174,7 @@ class S3Service:
         if settings.S3_ENDPOINT_URL:
             # For MinIO or LocalStack
             return f"{settings.S3_ENDPOINT_URL}/{self.bucket_name}/{s3_key}"
-        return f"https://{self.bucket_name}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
+        return f"https://dv0u9v99guak9.cloudfront.net/{s3_key}"
     
     def generate_presigned_url(
         self,
